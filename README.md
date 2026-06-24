@@ -6,6 +6,16 @@ com eles, troca cor/emoji/personagem/modelo, e ouve/fala por voz — tudo no nav
 
 ![status](https://img.shields.io/badge/openclaw-dashboard-7c9bff)
 
+## Capturas
+
+| Constelação 3D | Painel + palco do agente |
+|:--:|:--:|
+| ![constelação](screenshots/constellation.png) | ![palco](screenshots/panel-stage.png) |
+
+| Aba Design | Visão em cartões |
+|:--:|:--:|
+| ![design](screenshots/design-tab.png) | ![cartões](screenshots/cards.png) |
+
 ## Recursos
 
 - **Constelação 3D** dos agentes (Three.js) + **visão em cartões** (toggle).
