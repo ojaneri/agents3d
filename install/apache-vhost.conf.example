@@ -1,0 +1,42 @@
+# Vhost Apache de exemplo para o Agents3D.
+# Serve a página estática e faz proxy de /api/* para o bridge PHP (127.0.0.1:3007).
+# A autenticação é feita PELO APP (overlay de login) — não use Basic Auth do Apache.
+# Requer mods: proxy proxy_http headers rewrite ssl.
+
+<VirtualHost *:443>
+    ServerName agents3d.exemplo.com
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/agents3d.exemplo.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/agents3d.exemplo.com/privkey.pem
+
+    # Raiz pública: o shell estático (index.html + assets/)
+    DocumentRoot /var/www/agents3d
+    DirectoryIndex index.html
+    <Directory "/var/www/agents3d">
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    # Nunca sirva o código-fonte do bridge como estático.
+    <Files "router.php">
+        Require all denied
+    </Files>
+
+    # /api/* -> bridge PHP (roda como o dono do ~/.openclaw)
+    ProxyPreserveHost On
+    ProxyRequests Off
+    ProxyPass        /api/ http://127.0.0.1:3007/api/ retry=0 timeout=620
+    ProxyPassReverse /api/ http://127.0.0.1:3007/api/
+
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Não cachear o shell (app em iteração)
+    <LocationMatch "^/($|index\.html$)">
+        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    </LocationMatch>
+</VirtualHost>

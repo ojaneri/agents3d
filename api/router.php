@@ -14,12 +14,20 @@
 
 declare(strict_types=1);
 
-const OPENCLAW_BIN = '/usr/local/bin/openclaw';
-const OPENCLAW_HOME = '/root';
-const AGENTS_DIR = '/root/.openclaw/agents';
-const CACHE_DIR = '/run/agentes-api';
-const DESIGN_FILE = __DIR__ . '/design.json';        // overrides cosméticos (cor/personagem/voz)
-const OPENCLAW_CONFIG = '/root/.openclaw/openclaw.json';
+// ---- configuração de caminhos (defaults reproduzem o ambiente original;
+//      sobrescreva no .env: OPENCLAW_BIN, OPENCLAW_HOME, AGENTS_DIR, OPENCLAW_CONFIG, CACHE_DIR) ----
+$__cfg = load_env(__DIR__ . '/../.env');   // load_env é hoisted (definida abaixo)
+$__get = function (string $k, string $def) use ($__cfg): string {
+    if (!empty($__cfg[$k])) return $__cfg[$k];
+    $e = getenv($k);
+    return $e !== false && $e !== '' ? $e : $def;
+};
+define('OPENCLAW_BIN',    $__get('OPENCLAW_BIN', '/usr/local/bin/openclaw'));
+define('OPENCLAW_HOME',   $__get('OPENCLAW_HOME', getenv('HOME') ?: '/root'));
+define('AGENTS_DIR',      $__get('AGENTS_DIR', OPENCLAW_HOME . '/.openclaw/agents'));
+define('OPENCLAW_CONFIG', $__get('OPENCLAW_CONFIG', OPENCLAW_HOME . '/.openclaw/openclaw.json'));
+define('CACHE_DIR',       $__get('CACHE_DIR', '/run/agentes-api'));
+define('DESIGN_FILE',     __DIR__ . '/design.json');  // overrides cosméticos (cor/personagem/voz)
 
 // Modelos permitidos (allowlist) + runtime correspondente. Trocar modelo edita o openclaw.json.
 const MODELS = [

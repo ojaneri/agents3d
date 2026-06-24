@@ -1,0 +1,19 @@
+# systemd unit do bridge PHP (Agents3D -> OpenClaw)
+# Copie para /etc/systemd/system/agents3d-api.service, ajuste WorkingDirectory/User,
+# depois: systemctl daemon-reload && systemctl enable --now agents3d-api
+[Unit]
+Description=Agents3D API bridge (OpenClaw -> web 3D)
+After=network.target
+
+[Service]
+Type=simple
+# Usuário dono do ~/.openclaw (precisa acessar agents/ e editar openclaw.json):
+User=root
+Environment=HOME=/root
+WorkingDirectory=/var/www/agents3d/api
+ExecStart=/usr/bin/php -S 127.0.0.1:3007 router.php
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
