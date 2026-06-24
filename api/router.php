@@ -161,6 +161,21 @@ function rate_state(string $agentId): array {
     return ['rateLimited' => true, 'until' => $until];
 }
 
+/** Canal de origem da sessão (telegram/cron/main/explicit…), extraído da sessionKey na trajetória. */
+function session_channel(?string $sessionFile): ?string {
+    if (!$sessionFile) return null;
+    $traj = preg_replace('/\.jsonl$/', '.trajectory.jsonl', $sessionFile);
+    if (!is_file($traj)) return null;
+    $fh = fopen($traj, 'rb');
+    $buf = fread($fh, 16384);
+    fclose($fh);
+    foreach (explode("\n", $buf) as $line) {
+        if (strpos($line, 'sessionKey') === false) continue;
+        if (preg_match('/"sessionKey":"agent:[^:]*:([^:"]+)/', $line, $m)) return $m[1];
+    }
+    return null;
+}
+
 /** Texto legível a partir de content (string ou array de blocos). */
 function content_text($content): string {
     if (is_string($content)) return $content;
@@ -216,6 +231,7 @@ function activity(string $agentId): array {
         'messages' => array_values($msgs),
         'lastActivity' => date('c', $lastT),
         'busy' => (time() - $lastT) < 20, // ativo se mexeu nos últimos 20s
+        'channel' => session_channel($file),
     ];
 }
 

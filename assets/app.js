@@ -781,6 +781,17 @@ function bubble(role, text) {
   d.textContent = text;
   return d;
 }
+// entrada vinda de um canal externo (telegram/cron/…): à esquerda, com tag discreta
+function incomingBubble(text, channel) {
+  const d = document.createElement('div');
+  d.className = 'bubble them incoming';
+  const tag = document.createElement('span');
+  tag.className = 'ch-tag';
+  tag.textContent = '[' + channel + ']';
+  d.appendChild(tag);
+  d.appendChild(document.createTextNode(text));
+  return d;
+}
 
 function renderConversation(id) {
   if (selected !== id) return;
@@ -792,8 +803,15 @@ function renderConversation(id) {
     return;
   }
   thread.innerHTML = '';
-  // role=user → você (direita); role=assistant → agente (esquerda)
-  msgs.forEach(m => thread.appendChild(bubble(m.role === 'user' ? 'me' : 'them', m.text)));
+  // canal da sessão: se NÃO for do próprio dashboard, as mensagens "user" são entradas
+  // externas (telegram/cron/…) → vão à ESQUERDA com tag discreta, não como "você".
+  const ch = activityCache[id]?.channel || null;
+  const ownChannel = !ch || ['explicit', 'main', 'web', 'cli'].includes(ch);
+  msgs.forEach(m => {
+    if (m.role === 'assistant') { thread.appendChild(bubble('them', m.text)); return; }
+    if (ownChannel) { thread.appendChild(bubble('me', m.text)); return; }
+    thread.appendChild(incomingBubble(m.text, ch));
+  });
   pend.forEach(p => {
     if (p.role === 'them') { thread.appendChild(bubble('them', p.text)); return; }
     const b = bubble('me', p.text); b.classList.add('pending'); thread.appendChild(b);
