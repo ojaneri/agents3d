@@ -18,6 +18,19 @@ const OPENCLAW_BIN = '/usr/local/bin/openclaw';
 const OPENCLAW_HOME = '/root';
 const AGENTS_DIR = '/root/.openclaw/agents';
 const CACHE_DIR = '/run/agentes-api';
+const DESIGN_FILE = __DIR__ . '/design.json';        // overrides cosméticos (cor/personagem/voz)
+const OPENCLAW_CONFIG = '/root/.openclaw/openclaw.json';
+
+// Modelos permitidos (allowlist) + runtime correspondente. Trocar modelo edita o openclaw.json.
+const MODELS = [
+    'openai/gpt-5.5'              => 'codex',
+    'openai/gpt-5.4'             => 'codex',
+    'openai/gpt-5.4-mini'        => 'codex',
+    'anthropic/claude-opus-4-8'  => 'claude-cli',
+    'anthropic/claude-opus-4-7'  => 'claude-cli',
+    'anthropic/claude-opus-4-6'  => 'claude-cli',
+    'anthropic/claude-sonnet-4-6'=> 'claude-cli',
+];
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -106,6 +119,48 @@ function latest_session(string $agentId): ?string {
     return $best;
 }
 
+/** Trajetória (.trajectory.jsonl) mais recente de um agente. */
+function latest_trajectory(string $agentId): ?string {
+    $dir = AGENTS_DIR . '/' . basename($agentId) . '/sessions';
+    if (!is_dir($dir)) return null;
+    $best = null; $bestT = 0;
+    foreach (glob($dir . '/*trajectory*.jsonl') ?: [] as $f) {
+        $t = filemtime($f);
+        if ($t > $bestT) { $bestT = $t; $best = $f; }
+    }
+    return $best;
+}
+
+// O OpenClaw não expõe o horário de liberação do cooldown; usamos uma janela estimada
+// a partir do último evento de rate_limit na trajetória.
+const RATE_COOLDOWN = 90; // segundos
+
+/** Estado de rate-limit do agente, derivado do último model.fallback_step rate_limit. */
+function rate_state(string $agentId): array {
+    $f = latest_trajectory($agentId);
+    if ($f === null) return ['rateLimited' => false];
+    if (time() - filemtime($f) > RATE_COOLDOWN + 60) return ['rateLimited' => false]; // antigo demais
+    $size = filesize($f);
+    $fh = fopen($f, 'rb');
+    if ($size > 131072) fseek($fh, -131072, SEEK_END);
+    $buf = stream_get_contents($fh);
+    fclose($fh);
+    $lastTs = null;
+    foreach (explode("\n", $buf) as $line) {
+        if (strpos($line, 'rate_limit') === false) continue;
+        $row = json_decode($line, true);
+        if (!is_array($row)) continue;
+        if (($row['data']['fallbackStepFromFailureReason'] ?? '') === 'rate_limit' && !empty($row['ts'])) {
+            $t = strtotime($row['ts']);
+            if ($t && (!$lastTs || $t > $lastTs)) $lastTs = $t;
+        }
+    }
+    if ($lastTs === null) return ['rateLimited' => false];
+    $until = $lastTs + RATE_COOLDOWN;
+    if (time() >= $until) return ['rateLimited' => false];
+    return ['rateLimited' => true, 'until' => $until];
+}
+
 /** Texto legível a partir de content (string ou array de blocos). */
 function content_text($content): string {
     if (is_string($content)) return $content;
@@ -164,6 +219,94 @@ function activity(string $agentId): array {
     ];
 }
 
+// -------- design overrides (cosmético: cor / personagem / voz) --------
+function load_design(): array {
+    if (!is_file(DESIGN_FILE)) return [];
+    $d = json_decode((string)file_get_contents(DESIGN_FILE), true);
+    return is_array($d) ? $d : [];
+}
+function save_design(array $d): bool {
+    $tmp = DESIGN_FILE . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) === false) {
+        return false;
+    }
+    return @rename($tmp, DESIGN_FILE);
+}
+
+/** Conta respostas (role=assistant, com texto) na sessão mais recente — base do badge de não lidas. */
+function assistant_msg_count(string $agentId): int {
+    $file = latest_session($agentId);
+    if ($file === null) return 0;
+    $size = filesize($file);
+    $fh = fopen($file, 'rb');
+    if ($size > 131072) fseek($fh, -131072, SEEK_END);
+    $buf = stream_get_contents($fh);
+    fclose($fh);
+    $n = 0;
+    foreach (explode("\n", $buf) as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+        $row = json_decode($line, true);
+        if (!is_array($row) || ($row['type'] ?? '') !== 'message') continue;
+        $m = $row['message'] ?? null;
+        if (!is_array($m) || ($m['role'] ?? '') !== 'assistant') continue;
+        if (content_text($m['content'] ?? '') === '') continue;
+        $n++;
+    }
+    return $n;
+}
+
+function model_label(string $id): string {
+    $map = [
+        'openai/gpt-5.5'               => 'GPT-5.5',
+        'openai/gpt-5.4'              => 'GPT-5.4',
+        'openai/gpt-5.4-mini'        => 'GPT-5.4 mini',
+        'anthropic/claude-opus-4-8'  => 'Claude Opus 4.8',
+        'anthropic/claude-opus-4-7'  => 'Claude Opus 4.7',
+        'anthropic/claude-opus-4-6'  => 'Claude Opus 4.6',
+        'anthropic/claude-sonnet-4-6'=> 'Claude Sonnet 4.6',
+    ];
+    return $map[$id] ?? $id;
+}
+
+/** Altera o modelo de um agente no openclaw.json (backup + escrita atômica, sem restart).
+ *  IMPORTANTE: decodifica em modo OBJETO (não array) para preservar objetos vazios {}.
+ *  Em modo array, json_encode converteria {} em [] e invalidaria o schema do OpenClaw. */
+function set_agent_model(string $agent, string $model): array {
+    if (!isset(MODELS[$model])) return ['ok' => false, 'error' => 'modelo não permitido'];
+    $raw = @file_get_contents(OPENCLAW_CONFIG);
+    if ($raw === false) return ['ok' => false, 'error' => 'config ilegível'];
+    $cfg = json_decode($raw);   // objetos (stdClass) — preserva {}
+    if (!($cfg instanceof stdClass) || !isset($cfg->agents->list) || !is_array($cfg->agents->list)) {
+        return ['ok' => false, 'error' => 'estrutura inesperada no openclaw.json'];
+    }
+    $found = false;
+    foreach ($cfg->agents->list as $ag) {
+        if (($ag->id ?? '') === $agent) {
+            $ag->model = $model;
+            if (!isset($ag->models) || !($ag->models instanceof stdClass)) $ag->models = new stdClass();
+            if (!isset($ag->models->{$model}) || !($ag->models->{$model} instanceof stdClass)) $ag->models->{$model} = new stdClass();
+            if (!isset($ag->models->{$model}->agentRuntime) || !($ag->models->{$model}->agentRuntime instanceof stdClass)) $ag->models->{$model}->agentRuntime = new stdClass();
+            $ag->models->{$model}->agentRuntime->id = MODELS[$model];
+            $found = true;
+            break;
+        }
+    }
+    if (!$found) return ['ok' => false, 'error' => 'agente não encontrado na config'];
+
+    @copy(OPENCLAW_CONFIG, OPENCLAW_CONFIG . '.bak-design-' . date('Ymd-His'));
+    // poda: mantém só os 5 backups mais recentes
+    $baks = glob(OPENCLAW_CONFIG . '.bak-design-*') ?: [];
+    if (count($baks) > 5) { sort($baks); foreach (array_slice($baks, 0, -5) as $f) @unlink($f); }
+    $json = json_encode($cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) return ['ok' => false, 'error' => 'falha ao serializar config'];
+    $tmp = OPENCLAW_CONFIG . '.tmp';
+    if (@file_put_contents($tmp, $json) === false || !@rename($tmp, OPENCLAW_CONFIG)) {
+        return ['ok' => false, 'error' => 'falha ao gravar config'];
+    }
+    return ['ok' => true];
+}
+
 // -------- auth --------
 function load_env(string $path): array {
     $env = [];
@@ -212,16 +355,102 @@ if ($uri === '/api/health' || $uri === '/health') {
 
 if ($uri === '/api/agents') {
     $list = agents_list();
-    // normaliza e anexa status de atividade leve
+    $design = load_design();
+    // normaliza e anexa status de atividade leve + overrides de design
     foreach ($list as &$a) {
+        $id = $a['id'] ?? '';
         $a['emoji'] = $a['identityEmoji'] ?? $a['emoji'] ?? '🤖';
-        $a['name']  = $a['name'] ?? $a['identityName'] ?? $a['id'];
-        $file = latest_session($a['id'] ?? '');
+        $a['name']  = $a['name'] ?? $a['identityName'] ?? $id;
+        $file = latest_session($id);
         $a['lastActivity'] = $file ? date('c', filemtime($file)) : null;
         $a['busy'] = $file ? (time() - filemtime($file) < 20) : false;
+        $a['msgCount'] = assistant_msg_count($id);
+        $rs = rate_state($id);
+        $a['rateLimited'] = $rs['rateLimited'];
+        // segundos restantes (o cliente ancora no próprio relógio — evita skew servidor/navegador)
+        if (!empty($rs['until'])) $a['rateRemaining'] = max(0, $rs['until'] - time());
+        $ov = $design[$id] ?? null;
+        if (is_array($ov)) {
+            if (!empty($ov['color']))            $a['color'] = $ov['color'];
+            if (isset($ov['character']))         $a['character'] = $ov['character'];
+            if (isset($ov['voice']))             $a['voice'] = $ov['voice'];
+        }
     }
     unset($a);
     out($list);
+}
+
+if ($uri === '/api/models') {
+    $models = [];
+    foreach (MODELS as $id => $rt) {
+        $models[] = ['id' => $id, 'runtime' => $rt, 'label' => model_label($id)];
+    }
+    out(['models' => $models]);
+}
+
+if ($uri === '/api/design') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') out(['error' => 'use POST'], 405);
+    $b = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
+    $agent = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($b['agent'] ?? ''));
+    if ($agent === '') out(['error' => 'agent obrigatório'], 400);
+    // valida o agente. Se o CLI do OpenClaw estiver fora (lista vazia), ainda
+    // permitimos salvar overrides cosméticos (cor/personagem/voz) — só emoji/modelo
+    // dependem do CLI/config.
+    $ids = array_map(fn($a) => $a['id'] ?? '', agents_list());
+    $cliUp = count($ids) > 0;
+    $needsCli = !empty($b['emoji']) || !empty($b['model']);
+    if ($cliUp) {
+        if (!in_array($agent, $ids, true)) out(['error' => 'agente desconhecido'], 404);
+    } elseif ($needsCli) {
+        out(['error' => 'OpenClaw indisponível agora para alterar emoji/modelo'], 503);
+    }
+
+    $design = load_design();
+    $entry  = is_array($design[$agent] ?? null) ? $design[$agent] : [];
+    $applied = [];
+    $errors  = [];
+    $restartNeeded = false;
+
+    // cor (#rgb / #rrggbb)
+    if (array_key_exists('color', $b)) {
+        $c = strtolower(trim((string)$b['color']));
+        if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/', $c)) { $entry['color'] = $c; $applied[] = 'color'; }
+        else $errors[] = 'cor inválida';
+    }
+    // personagem
+    if (array_key_exists('character', $b)) {
+        $ch = preg_replace('/[^a-z0-9_\-]/', '', strtolower((string)$b['character']));
+        if ($ch !== '') { $entry['character'] = $ch; $applied[] = 'character'; }
+    }
+    // voz (nome da voz do navegador)
+    if (array_key_exists('voice', $b)) {
+        $entry['voice'] = mb_substr((string)$b['voice'], 0, 120);
+        $applied[] = 'voice';
+    }
+    $design[$agent] = $entry;
+    if (!save_design($design)) $errors[] = 'falha ao salvar design';
+
+    // emoji → via CLI set-identity (persiste na identidade real do OpenClaw)
+    if (!empty($b['emoji'])) {
+        $emoji = mb_substr(trim((string)$b['emoji']), 0, 8);
+        $r = openclaw(['agents', 'set-identity', '--agent', $agent, '--emoji', $emoji, '--json'], 30);
+        if ($r['code'] === 0) { $applied[] = 'emoji'; @unlink(CACHE_DIR . '/agents.json'); }
+        else $errors[] = 'falha ao definir emoji';
+    }
+
+    // modelo → edita openclaw.json (com backup, sem restart)
+    if (!empty($b['model'])) {
+        $res = set_agent_model($agent, (string)$b['model']);
+        if ($res['ok']) { $applied[] = 'model'; $restartNeeded = true; @unlink(CACHE_DIR . '/agents.json'); }
+        else $errors[] = $res['error'] ?? 'falha ao definir modelo';
+    }
+
+    out([
+        'ok'            => empty($errors),
+        'applied'       => $applied,
+        'errors'        => $errors,
+        'restartNeeded' => $restartNeeded,
+    ], empty($errors) ? 200 : 207);
 }
 
 if ($uri === '/api/activity') {

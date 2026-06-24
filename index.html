@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.css" />
+<link rel="stylesheet" href="/assets/style.css?v=20260624i" />
 <script type="importmap">
 {
   "imports": {
@@ -34,10 +34,17 @@
         <span>constelação OpenClaw</span>
       </div>
     </div>
+    <div class="view-toggle" id="viewToggle" role="tablist" aria-label="Modo de visualização">
+      <button class="vt-btn is-active" data-view="3d" role="tab" title="Constelação 3D">✦ 3D</button>
+      <button class="vt-btn" data-view="cards" role="tab" title="Cartões">▦ Cards</button>
+    </div>
     <div class="gw-status" id="gwStatus" title="Estado do gateway">
       <span class="dot"></span><span class="label">conectando…</span>
     </div>
   </header>
+
+  <!-- visão em cartões -->
+  <main class="cards hidden" id="cards" aria-label="Agentes (cartões)"></main>
 
   <!-- dica -->
   <div class="hint" id="hint">Toque em um agente para conversar</div>
@@ -48,6 +55,20 @@
   <!-- painel lateral -->
   <aside class="panel" id="panel" aria-hidden="true">
     <button class="panel-close" id="panelClose" aria-label="Fechar">✕</button>
+    <div class="panel-stage" id="panelStage">
+      <canvas id="agentStage"></canvas>
+      <div class="stage-zoom">
+        <button type="button" id="stageZoomIn" aria-label="Aproximar">+</button>
+        <button type="button" id="stageZoomOut" aria-label="Afastar">−</button>
+      </div>
+      <div class="stage-action" id="stageAction"></div>
+      <div class="stage-sleep hidden" id="stageSleep">
+        <div class="zzz">💤</div>
+        <div class="stage-sleep-label">rate limited — dormindo</div>
+        <div class="stage-sleep-timer" id="stageSleepTimer">—</div>
+      </div>
+    </div>
+    <div class="panel-main">
     <div class="panel-head">
       <div class="avatar" id="pAvatar">🙂</div>
       <div class="panel-id">
@@ -61,28 +82,54 @@
 
     <div class="tabs" role="tablist">
       <button class="tab is-active" data-tab="chat" role="tab">Conversa</button>
-      <button class="tab" data-tab="activity" role="tab">Atividade</button>
+      <button class="tab" data-tab="design" role="tab">Design</button>
     </div>
 
     <section class="tabpane is-active" data-pane="chat">
       <div class="thread" id="thread">
-        <div class="placeholder" id="threadPlaceholder">Comece a conversa abaixo.</div>
+        <div class="placeholder">Carregando conversa…</div>
       </div>
       <form class="composer" id="composer">
+        <button type="button" id="micBtn" class="icon-btn" aria-label="Falar" title="Falar (ditado por voz)">🎤</button>
         <input id="msg" type="text" autocomplete="off" placeholder="Escreva para o agente…" />
         <button type="submit" id="send" aria-label="Enviar">➤</button>
       </form>
     </section>
 
-    <section class="tabpane" data-pane="activity">
-      <div class="feed" id="feed">
-        <div class="placeholder">Sem atividade recente.</div>
+    <section class="tabpane" data-pane="design">
+      <div class="design" id="design">
+        <label class="d-label">Cor</label>
+        <div class="d-swatches" id="dSwatches"></div>
+        <div class="d-row">
+          <input type="color" id="dColor" class="d-color" value="#7c9bff" />
+          <span class="d-hex" id="dHex">#7c9bff</span>
+        </div>
+
+        <label class="d-label">Emoji</label>
+        <input type="text" id="dEmoji" class="d-input d-emoji" maxlength="8" placeholder="🤖" />
+
+        <label class="d-label">Personagem 3D</label>
+        <div class="d-chars" id="dChars"></div>
+
+        <label class="d-label">Modelo de LLM</label>
+        <select id="dModel" class="d-input d-select"></select>
+
+        <label class="d-label">Voz (leitura em voz alta)</label>
+        <select id="dVoice" class="d-input d-select"></select>
+        <div class="d-row d-voice-row">
+          <label class="d-toggle"><input type="checkbox" id="dTts" /> <span>Ler respostas em voz alta</span></label>
+          <button type="button" id="dVoiceTest" class="d-mini">Testar</button>
+        </div>
+
+        <button type="button" id="dSave" class="d-save">Salvar design</button>
+        <div class="d-msg" id="dMsg"></div>
       </div>
     </section>
+    </div>
   </aside>
 
   <!-- login overlay -->
-  <div id="loginOverlay" class="login-overlay">
+  <div id="loginOverlay" class="login-overlay hidden">
     <div class="login-card">
       <div class="login-logo">⚡</div>
       <h1>Agentes</h1>
@@ -96,6 +143,6 @@
     </div>
   </div>
 
-  <script type="module" src="/assets/app.js"></script>
+  <script type="module" src="/assets/app.js?v=20260624i"></script>
 </body>
 </html>
