@@ -755,15 +755,17 @@ function switchTab(name) {
 }
 
 // fechar painel
-$('#panelClose').onclick = () => {
+function closePanel() {
   panel.classList.remove('open');
   panel.setAttribute('aria-hidden', 'true');
   selected = null;
-  controls.autoRotate = !reduceMotion;
+  controls.autoRotate = (view === '3d' && !reduceMotion);
   dock.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   stopActivityPolling();
   stopStageLoop();
-};
+}
+$('#panelClose').onclick = closePanel;
+$('#panelBack').onclick = closePanel;
 
 // ================================================================
 //  CONVERSA UNIFICADA (histórico real da sessão) + FILA DE MENSAGENS

@@ -156,6 +156,7 @@ body{
   font-size:13px; transition:.2s;
 }
 .panel-close:hover{background:rgba(255,255,255,.12); color:var(--ink)}
+.panel-back{display:none}
 
 .panel-head{display:flex; gap:14px; align-items:center; padding:22px 22px 16px}
 .avatar{
@@ -393,6 +394,13 @@ body.cards-mode #scene{opacity:.35}
   .hint{bottom:104px}
   .panel{top:0; right:0; bottom:0; width:100vw; border-radius:0; flex-direction:column}
   .panel-stage{flex:0 0 32vh; border-right:0; border-bottom:1px solid var(--line)}
+  .panel-back{
+    display:inline-flex; align-items:center; position:absolute; z-index:3; top:12px; left:12px;
+    background:var(--glass); border:1px solid var(--line); color:var(--ink);
+    border-radius:999px; padding:8px 15px 8px 12px; font-family:var(--body); font-size:13px; font-weight:600;
+    cursor:pointer; backdrop-filter:blur(12px); box-shadow:0 6px 20px rgba(0,0,0,.4);
+  }
+  .panel-back:active{transform:scale(.96)}
   .brand-text span{display:none}
   .topbar{padding:12px 14px}
   .dock{bottom:14px; padding:8px; gap:8px; max-width:calc(100vw - 20px)}
