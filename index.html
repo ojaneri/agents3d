@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Agentes · Janeri</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%237c9bff'/%3E%3Cstop offset='1' stop-color='%2346e6b0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='9' fill='url(%23g)'/%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%237c9bff' stroke-opacity='.5'/%3E%3C/svg%3E" />
+<meta name="description" content="Constelação viva dos agentes OpenClaw — veja o que cada um está fazendo e converse." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- atmosfera / ruído -->
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- topo -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <strong>Agentes</strong>
+        <span>constelação OpenClaw</span>
+      </div>
+    </div>
+    <div class="gw-status" id="gwStatus" title="Estado do gateway">
+      <span class="dot"></span><span class="label">conectando…</span>
+    </div>
+  </header>
+
+  <!-- dica -->
+  <div class="hint" id="hint">Toque em um agente para conversar</div>
+
+  <!-- legenda / seletor inferior -->
+  <nav class="dock" id="dock" aria-label="Agentes"></nav>
+
+  <!-- painel lateral -->
+  <aside class="panel" id="panel" aria-hidden="true">
+    <button class="panel-close" id="panelClose" aria-label="Fechar">✕</button>
+    <div class="panel-head">
+      <div class="avatar" id="pAvatar">🙂</div>
+      <div class="panel-id">
+        <h2 id="pName">Agente</h2>
+        <div class="meta">
+          <span class="status" id="pStatus"><span class="dot"></span><span class="t">ocioso</span></span>
+          <span class="model" id="pModel">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="chat" role="tab">Conversa</button>
+      <button class="tab" data-tab="activity" role="tab">Atividade</button>
+    </div>
+
+    <section class="tabpane is-active" data-pane="chat">
+      <div class="thread" id="thread">
+        <div class="placeholder" id="threadPlaceholder">Comece a conversa abaixo.</div>
+      </div>
+      <form class="composer" id="composer">
+        <input id="msg" type="text" autocomplete="off" placeholder="Escreva para o agente…" />
+        <button type="submit" id="send" aria-label="Enviar">➤</button>
+      </form>
+    </section>
+
+    <section class="tabpane" data-pane="activity">
+      <div class="feed" id="feed">
+        <div class="placeholder">Sem atividade recente.</div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- login overlay -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-logo">⚡</div>
+      <h1>Agentes</h1>
+      <p class="login-sub">Constelação OpenClaw</p>
+      <form id="loginForm" autocomplete="on">
+        <input id="loginEmail" type="email" placeholder="E-mail" autocomplete="email" required />
+        <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" required />
+        <button type="submit" id="loginBtn">Entrar</button>
+        <div id="loginErr" class="login-err"></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>
